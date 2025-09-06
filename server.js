@@ -203,8 +203,8 @@ const initializeDefaultUsers = async () => {
         if (userCount === 0) {
             const defaultUsers = [
                 {
-                    email: 'teacher@math.com',
-                    password: await bcrypt.hash('teacherpass', 10),
+                    email: 'teachshashi@tmt.com',
+                    password: await bcrypt.hash('shashi12@tmt', 10),
                     name: 'Dr. Shashi Kant',
                     role: 'teacher',
                     profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
