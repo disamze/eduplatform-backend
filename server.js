@@ -207,7 +207,7 @@ const initializeDefaultUsers = async () => {
                     password: await bcrypt.hash('shashi12@tmt', 10),
                     name: 'Dr. Shashi Kant',
                     role: 'teacher',
-                    profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
+                    profileImage: 'shashi.png'
                 },
                 {
                     email: 'student1@math.com',
