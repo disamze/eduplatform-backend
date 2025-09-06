@@ -1,4 +1,7 @@
+// Complete server.js with profile image upload functionality
+
 require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -12,13 +15,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
-// CORS Configuration - FIXED to include your frontend domain
+// CORS Configuration
 const corsOptions = {
     origin: [
-        'https://tmtshashi.onrender.com',  // Your frontend domain
-        'https://eduplatform-backend-k9fr.onrender.com', // Your backend domain
+        'https://tmtshashi.onrender.com',
+        'https://eduplatform-backend-k9fr.onrender.com',
         'http://localhost:3000',
-        'http://localhost:8080', 
+        'http://localhost:8080',
         'http://127.0.0.1:5500',
         'http://localhost:5173'
     ],
@@ -29,19 +32,20 @@ const corsOptions = {
     optionsSuccessStatus: 204
 };
 
-// Apply CORS middleware
 app.use(cors(corsOptions));
-
-// Handle preflight OPTIONS requests
 app.options('*', cors(corsOptions));
-
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Create uploads directory if it doesn't exist - FIXED missing closing brace
+// Create uploads directories if they don't exist
 if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
+
+if (!fs.existsSync('uploads/profiles')) {
+    fs.mkdirSync('uploads/profiles');
+}
+
 app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint for Render
@@ -85,10 +89,9 @@ mongoose.connect(MONGODB_URI, {
     process.exit(1);
 });
 
-// Keep service alive on Render (prevents cold starts)
+// Keep service alive on Render
 if (process.env.NODE_ENV === 'production') {
     const keepAliveUrl = process.env.RENDER_SERVICE_URL || `http://localhost:${PORT}`;
-    
     setInterval(async () => {
         try {
             const response = await fetch(`${keepAliveUrl}/health`);
@@ -98,7 +101,7 @@ if (process.env.NODE_ENV === 'production') {
         } catch (error) {
             console.log('⚠️ Keep-alive ping failed (this is normal during development)');
         }
-    }, 14 * 60 * 1000); // Every 14 minutes
+    }, 14 * 60 * 1000);
 }
 
 // User Schema
@@ -108,6 +111,9 @@ const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     role: { type: String, enum: ['teacher', 'student'], required: true },
     profileImage: { type: String, default: '' },
+    bio: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    dateOfBirth: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });
@@ -169,8 +175,8 @@ const requireTeacher = (req, res, next) => {
     next();
 };
 
-// File Upload Configuration
-const storage = multer.diskStorage({
+// File Upload Configuration for Resources
+const resourceStorage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'uploads/');
     },
@@ -180,18 +186,45 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+// File Upload Configuration for Profile Images
+const profileStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/profiles/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const uploadResource = multer({
+    storage: resourceStorage,
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|zip|rar/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-        
+
         if (mimetype && extname) {
             return cb(null, true);
         } else {
             cb('Error: File type not supported');
+        }
+    }
+});
+
+const uploadProfile = multer({
+    storage: profileStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for profile images
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|gif/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+
+        if (mimetype && extname) {
+            return cb(null, true);
+        } else {
+            cb('Error: Only image files (JPEG, JPG, PNG, GIF) are allowed');
         }
     }
 });
@@ -207,21 +240,27 @@ const initializeDefaultUsers = async () => {
                     password: await bcrypt.hash('shashi12@tmt', 10),
                     name: 'Dr. Shashi Kant',
                     role: 'teacher',
-                    profileImage: 'shashi.png'
+                    profileImage: 'uploads/profiles/shashi.png',
+                    bio: 'Experienced Mathematics teacher with 10+ years of teaching experience.',
+                    phone: '+91-9876543210'
                 },
                 {
                     email: 'student1@math.com',
                     password: await bcrypt.hash('studentpass1', 10),
                     name: 'Sameer Kumar',
                     role: 'student',
-                    profileImage: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&h=150&fit=crop&crop=face'
+                    profileImage: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&h=150&fit=crop&crop=face',
+                    bio: 'Class 10 student preparing for board exams.',
+                    phone: '+91-9876543211'
                 },
                 {
                     email: 'student2@math.com',
                     password: await bcrypt.hash('studentpass2', 10),
                     name: 'Priya Sharma',
                     role: 'student',
-                    profileImage: 'https://images.unsplash.com/photo-1494790108755-2616b6b2ad0a?w=150&h=150&fit=crop&crop=face'
+                    profileImage: 'https://images.unsplash.com/photo-1494790108755-2616b6b2ad0a?w=150&h=150&fit=crop&crop=face',
+                    bio: 'Aspiring engineer, loves mathematics and science.',
+                    phone: '+91-9876543212'
                 }
             ];
 
@@ -267,9 +306,13 @@ app.post('/api/auth/login', async (req, res) => {
                 email: user.email,
                 name: user.name,
                 role: user.role,
-                profileImage: user.profileImage
+                profileImage: user.profileImage,
+                bio: user.bio,
+                phone: user.phone,
+                dateOfBirth: user.dateOfBirth
             }
         });
+
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -290,6 +333,7 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+
         const user = new User({
             email,
             password: hashedPassword,
@@ -315,13 +359,14 @@ app.post('/api/auth/register', async (req, res) => {
                 profileImage: user.profileImage
             }
         });
+
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// User Routes
+// User Profile Routes
 app.get('/api/user/profile', authenticateToken, async (req, res) => {
     try {
         const user = await User.findById(req.user.userId).select('-password');
@@ -337,16 +382,146 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
 
 app.put('/api/user/profile', authenticateToken, async (req, res) => {
     try {
-        const { name, profileImage } = req.body;
+        const { name, bio, phone, dateOfBirth } = req.body;
+
         const user = await User.findByIdAndUpdate(
             req.user.userId,
-            { name, profileImage, updatedAt: new Date() },
+            { name, bio, phone, dateOfBirth, updatedAt: new Date() },
             { new: true }
         ).select('-password');
-        
+
         res.json(user);
     } catch (error) {
         console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Profile Image Upload
+app.post('/api/user/profile/image', authenticateToken, uploadProfile.single('profileImage'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Delete old profile image if it exists and is a local file
+        if (user.profileImage && user.profileImage.startsWith('uploads/')) {
+            const oldImagePath = user.profileImage;
+            if (fs.existsSync(oldImagePath)) {
+                fs.unlinkSync(oldImagePath);
+            }
+        }
+
+        // Update user with new profile image path
+        const imagePath = req.file.path.replace(/\\/g, '/'); // Normalize path separators
+        user.profileImage = imagePath;
+        user.updatedAt = new Date();
+        await user.save();
+
+        res.json({
+            message: 'Profile image updated successfully',
+            profileImage: imagePath,
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                profileImage: user.profileImage,
+                bio: user.bio,
+                phone: user.phone,
+                dateOfBirth: user.dateOfBirth
+            }
+        });
+
+    } catch (error) {
+        console.error('Upload profile image error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Teacher can update student profile image
+app.post('/api/students/:id/profile/image', authenticateToken, requireTeacher, uploadProfile.single('profileImage'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const student = await User.findById(req.params.id);
+        if (!student || student.role !== 'student') {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Delete old profile image if it exists and is a local file
+        if (student.profileImage && student.profileImage.startsWith('uploads/')) {
+            const oldImagePath = student.profileImage;
+            if (fs.existsSync(oldImagePath)) {
+                fs.unlinkSync(oldImagePath);
+            }
+        }
+
+        // Update student with new profile image path
+        const imagePath = req.file.path.replace(/\\/g, '/');
+        student.profileImage = imagePath;
+        student.updatedAt = new Date();
+        await student.save();
+
+        res.json({
+            message: 'Student profile image updated successfully',
+            profileImage: imagePath,
+            student: {
+                id: student._id,
+                email: student.email,
+                name: student.name,
+                role: student.role,
+                profileImage: student.profileImage,
+                bio: student.bio,
+                phone: student.phone,
+                dateOfBirth: student.dateOfBirth
+            }
+        });
+
+    } catch (error) {
+        console.error('Upload student profile image error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Teacher can update student profile
+app.put('/api/students/:id/profile', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { name, email, bio, phone, dateOfBirth } = req.body;
+
+        const student = await User.findById(req.params.id);
+        if (!student || student.role !== 'student') {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Check if email is being changed and if it already exists
+        if (email && email !== student.email) {
+            const existingUser = await User.findOne({ email, _id: { $ne: req.params.id } });
+            if (existingUser) {
+                return res.status(400).json({ error: 'Email already exists' });
+            }
+        }
+
+        const updatedStudent = await User.findByIdAndUpdate(
+            req.params.id,
+            { name, email, bio, phone, dateOfBirth, updatedAt: new Date() },
+            { new: true }
+        ).select('-password');
+
+        res.json({
+            message: 'Student profile updated successfully',
+            student: updatedStudent
+        });
+
+    } catch (error) {
+        console.error('Update student profile error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -390,11 +565,11 @@ app.get('/api/resources', authenticateToken, async (req, res) => {
     try {
         const { type, search } = req.query;
         let query = {};
-        
+
         if (type) {
             query.type = type;
         }
-        
+
         if (search) {
             query.$or = [
                 { title: { $regex: search, $options: 'i' } },
@@ -413,7 +588,7 @@ app.get('/api/resources', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/resources', authenticateToken, requireTeacher, upload.single('file'), async (req, res) => {
+app.post('/api/resources', authenticateToken, requireTeacher, uploadResource.single('file'), async (req, res) => {
     try {
         const { title, description, type } = req.body;
 
@@ -448,7 +623,6 @@ app.delete('/api/resources/:id', authenticateToken, requireTeacher, async (req, 
             return res.status(404).json({ error: 'Resource not found' });
         }
 
-        // Delete file from filesystem
         if (fs.existsSync(resource.filePath)) {
             fs.unlinkSync(resource.filePath);
         }
@@ -531,7 +705,7 @@ app.delete('/api/schedules/:id', authenticateToken, requireTeacher, async (req, 
     }
 });
 
-// Student Management Routes (Teacher Only)
+// Student Management Routes
 app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => {
     try {
         const students = await User.find({ role: 'student' }).select('-password');
@@ -544,10 +718,10 @@ app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => 
 
 app.post('/api/students', authenticateToken, requireTeacher, async (req, res) => {
     try {
-        const { email, password, name } = req.body;
+        const { email, password, name, bio, phone, dateOfBirth } = req.body;
 
         if (!email || !password || !name) {
-            return res.status(400).json({ error: 'All fields are required' });
+            return res.status(400).json({ error: 'Email, password, and name are required' });
         }
 
         const existingUser = await User.findOne({ email });
@@ -556,21 +730,30 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+
         const student = new User({
             email,
             password: hashedPassword,
             name,
-            role: 'student'
+            role: 'student',
+            bio,
+            phone,
+            dateOfBirth
         });
 
         await student.save();
+
         res.status(201).json({
             id: student._id,
             email: student.email,
             name: student.name,
             role: student.role,
+            bio: student.bio,
+            phone: student.phone,
+            dateOfBirth: student.dateOfBirth,
             createdAt: student.createdAt
         });
+
     } catch (error) {
         console.error('Create student error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -579,6 +762,15 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
 
 app.delete('/api/students/:id', authenticateToken, requireTeacher, async (req, res) => {
     try {
+        const student = await User.findById(req.params.id);
+
+        // Delete profile image if it exists and is a local file
+        if (student && student.profileImage && student.profileImage.startsWith('uploads/')) {
+            if (fs.existsSync(student.profileImage)) {
+                fs.unlinkSync(student.profileImage);
+            }
+        }
+
         await User.findByIdAndDelete(req.params.id);
         res.json({ message: 'Student deleted successfully' });
     } catch (error) {
