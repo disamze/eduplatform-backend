@@ -16,7 +16,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 const corsOptions = {
     origin: [
         'https://tmtshashi.onrender.com',  // Your frontend domain
-        'https://TheMathematicsTuitorials-backend-k9fr.onrender.com', // Your backend domain
+        'https://eduplatform-backend-k9fr.onrender.com', // Your backend domain
         'http://localhost:3000',
         'http://localhost:8080', 
         'http://127.0.0.1:5500',
@@ -71,7 +71,7 @@ app.get('/', (req, res) => {
 });
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/TheMathematicsTuitorials';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eduplatform';
 
 mongoose.connect(MONGODB_URI, {
     useNewUrlParser: true,
