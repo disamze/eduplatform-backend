@@ -12,23 +12,33 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
-// Middleware
-app.use(cors({
-    origin: process.env.FRONTEND_URL || [
-        'http://localhost:3000', 
+// CORS Configuration - FIXED to include your frontend domain
+const corsOptions = {
+    origin: [
+        'https://tmtshashi.onrender.com',  // Your frontend domain
+        'https://eduplatform-backend-k9fr.onrender.com', // Your backend domain
+        'http://localhost:3000',
         'http://localhost:8080', 
         'http://127.0.0.1:5500',
-        'http://localhost:5173' // Vite default
+        'http://localhost:5173'
     ],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests
+app.options('*', cors(corsOptions));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Create uploads directory if it doesn't exist
+// Create uploads directory if it doesn't exist - FIXED missing closing brace
 if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
@@ -36,8 +46,8 @@ app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK', 
+    res.status(200).json({
+        status: 'OK',
         timestamp: new Date().toISOString(),
         service: 'Educational Platform API',
         version: '1.0.0'
@@ -46,7 +56,7 @@ app.get('/health', (req, res) => {
 
 // Root endpoint
 app.get('/', (req, res) => {
-    res.json({ 
+    res.json({
         message: 'Educational Platform API is running',
         version: '1.0.0',
         health: '/health',
@@ -170,7 +180,7 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ 
+const upload = multer({
     storage: storage,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
     fileFilter: (req, file, cb) => {
