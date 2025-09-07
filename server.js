@@ -1,4 +1,4 @@
-// Complete server.js with profile image upload functionality
+// Complete server.js with Fee Management System
 
 require('dotenv').config();
 
@@ -69,7 +69,8 @@ app.get('/', (req, res) => {
             resources: '/api/resources/*',
             schedules: '/api/schedules/*',
             users: '/api/user/*',
-            students: '/api/students/*'
+            students: '/api/students/*',
+            fees: '/api/fees/*'
         }
     });
 });
@@ -149,6 +150,24 @@ const scheduleSchema = new mongoose.Schema({
 
 const Schedule = mongoose.model('Schedule', scheduleSchema);
 
+// Fee Schema
+const feeSchema = new mongoose.Schema({
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    month: { type: String, required: true },
+    year: { type: Number, required: true },
+    amount: { type: Number, required: true },
+    status: { type: String, enum: ['paid', 'pending', 'overdue'], default: 'pending' },
+    paymentDate: { type: Date },
+    notes: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+// Create compound index to prevent duplicate fees for same student/month/year
+feeSchema.index({ studentId: 1, month: 1, year: 1 }, { unique: true });
+
+const Fee = mongoose.model('Fee', feeSchema);
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -208,7 +227,7 @@ const uploadResource = multer({
         if (mimetype && extname) {
             return cb(null, true);
         } else {
-            cb('Error: File type not supported');
+            cb(new Error('File type not supported'));
         }
     }
 });
@@ -224,13 +243,13 @@ const uploadProfile = multer({
         if (mimetype && extname) {
             return cb(null, true);
         } else {
-            cb('Error: Only image files (JPEG, JPG, PNG, GIF) are allowed');
+            cb(new Error('Only image files (JPEG, JPG, PNG, GIF) are allowed'));
         }
     }
 });
 
-// Initialize Default Users
-const initializeDefaultUsers = async () => {
+// Initialize Default Users and Sample Fees
+const initializeDefaultData = async () => {
     try {
         const userCount = await User.countDocuments();
         if (userCount === 0) {
@@ -264,11 +283,52 @@ const initializeDefaultUsers = async () => {
                 }
             ];
 
-            await User.insertMany(defaultUsers);
+            const createdUsers = await User.insertMany(defaultUsers);
             console.log('✅ Default users created');
+
+            // Create sample fee records
+            const students = createdUsers.filter(user => user.role === 'student');
+            const currentYear = new Date().getFullYear();
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+
+            const sampleFees = [];
+            
+            for (const student of students) {
+                // Create fees for the last 6 months
+                for (let i = 0; i < 6; i++) {
+                    const monthIndex = (new Date().getMonth() - i + 12) % 12;
+                    const year = monthIndex > new Date().getMonth() ? currentYear - 1 : currentYear;
+                    
+                    let status = 'paid';
+                    let paymentDate = new Date(year, monthIndex + 1, Math.floor(Math.random() * 28) + 1);
+                    
+                    // Make some fees pending/overdue for demo
+                    if (i === 0 && student.name === 'Sameer Kumar') {
+                        status = 'pending';
+                        paymentDate = null;
+                    } else if (i === 1 && student.name === 'Priya Sharma') {
+                        status = 'overdue';
+                        paymentDate = null;
+                    }
+
+                    sampleFees.push({
+                        studentId: student._id,
+                        month: months[monthIndex],
+                        year: year,
+                        amount: 1500,
+                        status: status,
+                        paymentDate: paymentDate,
+                        notes: status === 'paid' ? 'Paid online' : ''
+                    });
+                }
+            }
+
+            await Fee.insertMany(sampleFees);
+            console.log('✅ Sample fee records created');
         }
     } catch (error) {
-        console.error('❌ Error creating default users:', error);
+        console.error('❌ Error creating default data:', error);
     }
 };
 
@@ -312,7 +372,6 @@ app.post('/api/auth/login', async (req, res) => {
                 dateOfBirth: user.dateOfBirth
             }
         });
-
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -333,7 +392,6 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const user = new User({
             email,
             password: hashedPassword,
@@ -359,7 +417,6 @@ app.post('/api/auth/register', async (req, res) => {
                 profileImage: user.profileImage
             }
         });
-
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -383,7 +440,6 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
 app.put('/api/user/profile', authenticateToken, async (req, res) => {
     try {
         const { name, bio, phone, dateOfBirth } = req.body;
-
         const user = await User.findByIdAndUpdate(
             req.user.userId,
             { name, bio, phone, dateOfBirth, updatedAt: new Date() },
@@ -437,7 +493,6 @@ app.post('/api/user/profile/image', authenticateToken, uploadProfile.single('pro
                 dateOfBirth: user.dateOfBirth
             }
         });
-
     } catch (error) {
         console.error('Upload profile image error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -484,7 +539,6 @@ app.post('/api/students/:id/profile/image', authenticateToken, requireTeacher, u
                 dateOfBirth: student.dateOfBirth
             }
         });
-
     } catch (error) {
         console.error('Upload student profile image error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -495,8 +549,8 @@ app.post('/api/students/:id/profile/image', authenticateToken, requireTeacher, u
 app.put('/api/students/:id/profile', authenticateToken, requireTeacher, async (req, res) => {
     try {
         const { name, email, bio, phone, dateOfBirth } = req.body;
-
         const student = await User.findById(req.params.id);
+
         if (!student || student.role !== 'student') {
             return res.status(404).json({ error: 'Student not found' });
         }
@@ -519,7 +573,6 @@ app.put('/api/students/:id/profile', authenticateToken, requireTeacher, async (r
             message: 'Student profile updated successfully',
             student: updatedStudent
         });
-
     } catch (error) {
         console.error('Update student profile error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -588,6 +641,23 @@ app.get('/api/resources', authenticateToken, async (req, res) => {
     }
 });
 
+// Get single resource
+app.get('/api/resources/:id', authenticateToken, async (req, res) => {
+    try {
+        const resource = await Resource.findById(req.params.id)
+            .populate('uploadedBy', 'name email');
+        
+        if (!resource) {
+            return res.status(404).json({ error: 'Resource not found' });
+        }
+
+        res.json(resource);
+    } catch (error) {
+        console.error('Get resource error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.post('/api/resources', authenticateToken, requireTeacher, uploadResource.single('file'), async (req, res) => {
     try {
         const { title, description, type } = req.body;
@@ -623,6 +693,7 @@ app.delete('/api/resources/:id', authenticateToken, requireTeacher, async (req, 
             return res.status(404).json({ error: 'Resource not found' });
         }
 
+        // Delete the actual file
         if (fs.existsSync(resource.filePath)) {
             fs.unlinkSync(resource.filePath);
         }
@@ -635,21 +706,63 @@ app.delete('/api/resources/:id', authenticateToken, requireTeacher, async (req, 
     }
 });
 
+// Fixed download resource endpoint
 app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
     try {
+        console.log('📥 Download request for resource:', req.params.id);
+        
         const resource = await Resource.findById(req.params.id);
         if (!resource) {
+            console.error('❌ Resource not found:', req.params.id);
             return res.status(404).json({ error: 'Resource not found' });
         }
 
+        console.log('📁 Resource found:', {
+            title: resource.title,
+            fileName: resource.fileName,
+            filePath: resource.filePath
+        });
+
+        // Check if file exists
         if (!fs.existsSync(resource.filePath)) {
-            return res.status(404).json({ error: 'File not found' });
+            console.error('❌ File not found on disk:', resource.filePath);
+            return res.status(404).json({ error: 'File not found on server' });
         }
 
-        res.download(resource.filePath, resource.fileName);
+        // Get file stats
+        const stat = fs.statSync(resource.filePath);
+        console.log('📊 File stats:', {
+            size: stat.size,
+            path: resource.filePath
+        });
+
+        // Set proper headers for download
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(resource.fileName)}"`);
+        res.setHeader('Content-Length', stat.size);
+        res.setHeader('Cache-Control', 'no-cache');
+
+        // Send file
+        const fileStream = fs.createReadStream(resource.filePath);
+        
+        fileStream.on('error', (error) => {
+            console.error('❌ File stream error:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error reading file' });
+            }
+        });
+
+        fileStream.on('end', () => {
+            console.log('✅ File download completed:', resource.fileName);
+        });
+
+        fileStream.pipe(res);
+
     } catch (error) {
-        console.error('Download resource error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('❌ Download resource error:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 });
 
@@ -730,7 +843,6 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const student = new User({
             email,
             password: hashedPassword,
@@ -753,7 +865,6 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
             dateOfBirth: student.dateOfBirth,
             createdAt: student.createdAt
         });
-
     } catch (error) {
         console.error('Create student error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -771,10 +882,149 @@ app.delete('/api/students/:id', authenticateToken, requireTeacher, async (req, r
             }
         }
 
+        // Delete all fee records for this student
+        await Fee.deleteMany({ studentId: req.params.id });
+
         await User.findByIdAndDelete(req.params.id);
         res.json({ message: 'Student deleted successfully' });
     } catch (error) {
         console.error('Delete student error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Fee Management Routes
+
+// Get all students with their fee status (Teacher only)
+app.get('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const students = await User.find({ role: 'student' }).select('-password');
+        
+        const studentsWithFees = await Promise.all(
+            students.map(async (student) => {
+                const fees = await Fee.find({ studentId: student._id })
+                    .sort({ year: -1, createdAt: -1 });
+                
+                return {
+                    ...student.toObject(),
+                    fees: fees
+                };
+            })
+        );
+
+        res.json(studentsWithFees);
+    } catch (error) {
+        console.error('Get student fees error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get fee statistics (Teacher only)
+app.get('/api/fees/stats', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const totalStudents = await User.countDocuments({ role: 'student' });
+        
+        const feeStats = await Fee.aggregate([
+            {
+                $group: {
+                    _id: '$status',
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: '$amount' }
+                }
+            }
+        ]);
+
+        // Get unique students with different statuses
+        const studentsWithPaidFees = await Fee.distinct('studentId', { status: 'paid' });
+        const studentsWithPendingFees = await Fee.distinct('studentId', { status: 'pending' });
+        const studentsWithOverdueFees = await Fee.distinct('studentId', { status: 'overdue' });
+
+        const stats = {
+            totalStudents,
+            paidStudents: studentsWithPaidFees.length,
+            pendingStudents: studentsWithPendingFees.length,
+            overdueStudents: studentsWithOverdueFees.length,
+            totalAmount: feeStats.reduce((sum, stat) => sum + stat.totalAmount, 0)
+        };
+
+        res.json(stats);
+    } catch (error) {
+        console.error('Get fee stats error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update or create fee status (Teacher only)
+app.post('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { studentId, month, year, amount, status, paymentDate, notes } = req.body;
+
+        if (!studentId || !month || !year || !amount || !status) {
+            return res.status(400).json({ error: 'Student ID, month, year, amount, and status are required' });
+        }
+
+        // Check if student exists
+        const student = await User.findById(studentId);
+        if (!student || student.role !== 'student') {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Update or create fee record
+        const feeData = {
+            studentId,
+            month,
+            year: parseInt(year),
+            amount: parseFloat(amount),
+            status,
+            paymentDate: status === 'paid' && paymentDate ? new Date(paymentDate) : null,
+            notes: notes || '',
+            updatedAt: new Date()
+        };
+
+        const fee = await Fee.findOneAndUpdate(
+            { studentId, month, year: parseInt(year) },
+            feeData,
+            { new: true, upsert: true }
+        );
+
+        res.json({
+            message: 'Fee status updated successfully',
+            fee
+        });
+    } catch (error) {
+        console.error('Update fee status error:', error);
+        if (error.code === 11000) {
+            res.status(400).json({ error: 'Fee record for this month already exists' });
+        } else {
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+});
+
+// Get student's own fee status (Student only)
+app.get('/api/fees/status', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ error: 'Student access only' });
+        }
+
+        const fees = await Fee.find({ studentId: req.user.userId })
+            .sort({ year: -1, createdAt: -1 });
+
+        res.json(fees);
+    } catch (error) {
+        console.error('Get student fee status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete fee record (Teacher only)
+app.delete('/api/fees/:id', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        await Fee.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Fee record deleted successfully' });
+    } catch (error) {
+        console.error('Delete fee error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -793,12 +1043,13 @@ app.use('*', (req, res) => {
 // Start server
 const startServer = async () => {
     try {
-        await initializeDefaultUsers();
+        await initializeDefaultData();
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`📊 Health check: http://localhost:${PORT}/health`);
             console.log(`🎓 Educational Platform API Ready!`);
+            console.log(`💰 Fee Management System Enabled!`);
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
