@@ -1,3 +1,6 @@
+
+
+
 // Complete server.js with Fee Management System, Results/Leaderboard, and Announcements/Notice Board
 
 require('dotenv').config();
@@ -18,12 +21,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 // CORS Configuration
 const corsOptions = {
     origin: [
-        'https://tmtshashi.onrender.com',
-        'https://eduplatform-backend-k9fr.onrender.com',
-        'http://localhost:3000',
-        'http://localhost:8080',
-        'http://127.0.0.1:5500',
-        'http://localhost:5173'
+    'https://tmtshashi.onrender.com',
+    'https://eduplatform-backend-k9fr.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'http://127.0.0.1:5500',
+    'http://localhost:5173'
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -130,32 +133,33 @@ if (process.env.NODE_ENV === 'production') {
 // Database Schemas
 
 // User Schema
+// User Schema with indexes
 const userSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    name: { type: String, required: true },
-    role: { type: String, enum: ['teacher', 'student'], required: true },
-    profileImage: { type: String, default: '' },
-    bio: { type: String, default: '' },
-    phone: { type: String, default: '' },
-    dateOfBirth: { type: String, default: '' },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
+  email: { type: String, required: true, unique: true, index: true },
+  password: { type: String, required: true },
+  name: { type: String, required: true, index: true },
+  role: { type: String, enum: ['teacher', 'student'], required: true, index: true },
+  profileImage: { type: String, default: '' },
+  bio: { type: String, default: '' },
+  phone: { type: String, default: '' },
+  dateOfBirth: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now, index: true },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model('User', userSchema);
 
 // Resource Schema
 const resourceSchema = new mongoose.Schema({
-    title: { type: String, required: true },
-    description: { type: String, default: '' },
-    type: { type: String, enum: ['note', 'question', 'book'], required: true },
-    fileName: { type: String, required: true },
-    filePath: { type: String, required: true },
-    fileSize: { type: Number, required: true },
-    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
+  title: { type: String, required: true, index: true },
+  description: { type: String, default: '' },
+  type: { type: String, enum: ['note', 'question', 'book'], required: true, index: true },
+  fileName: { type: String, required: true },
+  filePath: { type: String, required: true },
+  fileSize: { type: Number, required: true },
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  createdAt: { type: Date, default: Date.now, index: true },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 const Resource = mongoose.model('Resource', resourceSchema);
@@ -213,33 +217,34 @@ const Result = mongoose.model('Result', resultSchema);
 
 // NEW: Announcement Schema
 const announcementSchema = new mongoose.Schema({
-    title: { type: String, required: true },
-    content: { type: String, required: true },
-    priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
+  title: { type: String, required: true, index: true },
+  content: { type: String, required: true },
+  priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal', index: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  createdAt: { type: Date, default: Date.now, index: true },
+  updatedAt: { type: Date, default: Date.now }
 });
+
 
 const Announcement = mongoose.model('Announcement', announcementSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) {
-        return res.status(401).json({ error: 'Access token required' });
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
     }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ error: 'Invalid or expired token' });
-        }
-        req.user = user;
-        next();
-    });
+    req.user = user;
+    next();
+  });
 };
 
 // Teacher Role Middleware
@@ -1495,7 +1500,715 @@ const startServer = async () => {
         process.exit(1);
     }
 };
+// Optimized server.js with performance improvements
+
+require('dotenv').config();
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+
+// CORS Configuration
+
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Create uploads directories if they don't exist
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
+if (!fs.existsSync('uploads/profiles')) {
+  fs.mkdirSync('uploads/profiles');
+}
+
+// FIXED: Serve static files with proper MIME types
+app.use('/uploads', express.static('uploads'));
+app.use(express.static('.', {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html');
+    }
+  }
+}));
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    service: 'Educational Platform API',
+    version: '1.0.0'
+  });
+});
+
+// Root endpoint - serve index.html for the main app
+app.get('/', (req, res) => {
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    res.json({
+      message: 'Educational Platform API is running',
+      version: '1.0.0',
+      health: '/health',
+      endpoints: {
+        auth: '/api/auth/*',
+        resources: '/api/resources/*',
+        schedules: '/api/schedules/*',
+        users: '/api/user/*',
+        students: '/api/students/*',
+        fees: '/api/fees/*',
+        results: '/api/results/*',
+        announcements: '/api/announcements/*'
+      }
+    });
+  } else {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
+});
+
+// MongoDB Connection with optimized settings
+
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  maxPoolSize: 10, // Maintain up to 10 socket connections
+  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  family: 4, // Use IPv4, skip trying IPv6
+  bufferMaxEntries: 0, // Disable mongoose buffering
+  bufferCommands: false, // Disable mongoose buffering
+})
+.then(() => {
+  console.log('✅ Connected to MongoDB');
+})
+.catch((error) => {
+  console.error('❌ MongoDB connection error:', error);
+  process.exit(1);
+});
+
+// Keep service alive on Render
+if (process.env.NODE_ENV === 'production') {
+  const keepAliveUrl = process.env.RENDER_SERVICE_URL || `http://localhost:${PORT}`;
+  setInterval(async () => {
+    try {
+      const response = await fetch(`${keepAliveUrl}/health`);
+      if (response.ok) {
+        console.log('🏓 Keep-alive ping successful');
+      }
+    } catch (error) {
+      console.log('⚠️ Keep-alive ping failed (this is normal during development)');
+    }
+  }, 14 * 60 * 1000);
+}
+
+// OPTIMIZED Database Schemas with proper indexing
+
+// User Schema with indexes
+
+
+// Create compound indexes for better performance
+userSchema.index({ role: 1, createdAt: -1 });
+
+// Resource Schema with indexes
+
+
+// Compound indexes for resources
+resourceSchema.index({ type: 1, createdAt: -1 });
+resourceSchema.index({ uploadedBy: 1, type: 1 });
+
+// Schedule Schema with indexes
+
+scheduleSchema.index({ date: 1, time: 1 });
+
+// Fee Schema with optimized indexes
+
+
+// Optimized compound indexes
+feeSchema.index({ studentId: 1, month: 1, year: 1 }, { unique: true });
+feeSchema.index({ studentId: 1, status: 1 });
+feeSchema.index({ status: 1, year: -1 });
+
+// Result Schema with indexes
+
+
+// Compound indexes for results
+resultSchema.index({ studentId: 1, examDate: -1 });
+resultSchema.index({ studentId: 1, percentage: -1 });
+
+// Announcement Schema with indexes
+
+
+announcementSchema.index({ priority: 1, createdAt: -1 });
+
+// PERFORMANCE: Add caching layer
+const cache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function getCachedData(key) {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedData(key, data) {
+  cache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+}
+
+// Clear old cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of cache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      cache.delete(key);
+    }
+  }
+}, CACHE_DURATION);
+
+// Authentication Middleware
+
+
+// Teacher Role Middleware
+
+
+
+
+// Helper function to calculate grade
+function calculateGrade(percentage) {
+  if (percentage >= 90) return 'A+';
+  if (percentage >= 80) return 'A';
+  if (percentage >= 70) return 'B+';
+  if (percentage >= 60) return 'B';
+  if (percentage >= 50) return 'C+';
+  if (percentage >= 40) return 'C';
+  if (percentage >= 33) return 'D';
+  return 'F';
+}
+
+// OPTIMIZED: Initialize Default Users only if needed
+
+// Routes
+
+// Authentication Routes
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profileImage: user.profileImage,
+        bio: user.bio,
+        phone: user.phone,
+        dateOfBirth: user.dateOfBirth
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, role } = req.body;
+
+    if (!email || !password || !name || !role) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({
+      email,
+      password: hashedPassword,
+      name,
+      role
+    });
+
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profileImage: user.profileImage
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// User Profile Routes
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, bio, phone, dateOfBirth } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { name, bio, phone, dateOfBirth, updatedAt: new Date() },
+      { new: true }
+    ).select('-password');
+    
+    // Clear cache
+    cache.delete(`user_${req.user.userId}`);
+    
+    res.json(user);
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Dashboard Routes with caching
+app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const cacheKey = `dashboard_stats_${req.user.role}`;
+    let cachedStats = getCachedData(cacheKey);
+    
+    if (cachedStats) {
+      return res.json(cachedStats);
+    }
+
+    if (req.user.role === 'teacher') {
+      // Use parallel queries for better performance
+      const [notesCount, questionsCount, booksCount, studentsCount, schedulesCount] = await Promise.all([
+        Resource.countDocuments({ type: 'note' }),
+        Resource.countDocuments({ type: 'question' }),
+        Resource.countDocuments({ type: 'book' }),
+        User.countDocuments({ role: 'student' }),
+        Schedule.countDocuments()
+      ]);
+
+      const stats = {
+        notes: notesCount,
+        questions: questionsCount,
+        books: booksCount,
+        students: studentsCount,
+        schedules: schedulesCount
+      };
+
+      setCachedData(cacheKey, stats);
+      res.json(stats);
+    } else {
+      const [totalResources, upcomingSchedules] = await Promise.all([
+        Resource.countDocuments(),
+        Schedule.countDocuments({
+          date: { $gte: new Date().toISOString().split('T')[0] }
+        })
+      ]);
+
+      const stats = {
+        totalResources,
+        upcomingSchedules
+      };
+
+      setCachedData(cacheKey, stats);
+      res.json(stats);
+    }
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Resource Routes
+app.get('/api/resources', authenticateToken, async (req, res) => {
+  try {
+    const { type, search, limit = 20, page = 1 } = req.query;
+    let query = {};
+    
+    if (type) {
+      query.type = type;
+    }
+    
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+    
+    const resources = await Resource.find(query)
+      .populate('uploadedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean(); // Use lean() for better performance
+
+    res.json(resources);
+  } catch (error) {
+    console.error('Get resources error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/resources', authenticateToken, requireTeacher, uploadResource.single('file'), async (req, res) => {
+  try {
+    const { title, description, type } = req.body;
+
+    if (!title || !type || !req.file) {
+      return res.status(400).json({ error: 'Title, type, and file are required' });
+    }
+
+    const resource = new Resource({
+      title,
+      description,
+      type,
+      fileName: req.file.originalname,
+      filePath: req.file.path,
+      fileSize: req.file.size,
+      uploadedBy: req.user.userId
+    });
+
+    await resource.save();
+    await resource.populate('uploadedBy', 'name email');
+    
+    // Clear related cache
+    cache.delete('dashboard_stats_teacher');
+    
+    res.status(201).json(resource);
+  } catch (error) {
+    console.error('Create resource error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Schedule Routes
+app.get('/api/schedules', authenticateToken, async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    
+    const schedules = await Schedule.find()
+      .populate('createdBy', 'name email')
+      .sort({ date: -1, time: -1 })
+      .limit(parseInt(limit))
+      .lean();
+      
+    res.json(schedules);
+  } catch (error) {
+    console.error('Get schedules error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/schedules', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const { title, description, date, time, meetingLink, password } = req.body;
+
+    if (!title || !date || !time) {
+      return res.status(400).json({ error: 'Title, date, and time are required' });
+    }
+
+    const schedule = new Schedule({
+      title,
+      description,
+      date,
+      time,
+      meetingLink,
+      password,
+      createdBy: req.user.userId
+    });
+
+    await schedule.save();
+    await schedule.populate('createdBy', 'name email');
+    
+    // Clear related cache
+    cache.delete('dashboard_stats_teacher');
+    
+    res.status(201).json(schedule);
+  } catch (error) {
+    console.error('Create schedule error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Student Management Routes
+app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const { limit = 50 } = req.query;
+    
+    const students = await User.find({ role: 'student' })
+      .select('-password')
+      .limit(parseInt(limit))
+      .lean();
+      
+    res.json(students);
+  } catch (error) {
+    console.error('Get students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Fee Management Routes
+app.get('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const cacheKey = 'fees_with_students';
+    let cachedData = getCachedData(cacheKey);
+    
+    if (cachedData) {
+      return res.json(cachedData);
+    }
+
+    const students = await User.find({ role: 'student' })
+      .select('-password')
+      .limit(50)
+      .lean();
+      
+    const studentIds = students.map(s => s._id);
+    const fees = await Fee.find({ studentId: { $in: studentIds } })
+      .sort({ year: -1, createdAt: -1 })
+      .lean();
+
+    // Group fees by student
+    const feesByStudent = fees.reduce((acc, fee) => {
+      const studentId = fee.studentId.toString();
+      if (!acc[studentId]) acc[studentId] = [];
+      acc[studentId].push(fee);
+      return acc;
+    }, {});
+
+    const studentsWithFees = students.map(student => ({
+      ...student,
+      fees: feesByStudent[student._id.toString()] || []
+    }));
+
+    setCachedData(cacheKey, studentsWithFees);
+    res.json(studentsWithFees);
+  } catch (error) {
+    console.error('Get student fees error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Results Routes
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    const { limit = 20, page = 1 } = req.query;
+    const skip = (page - 1) * limit;
+    
+    let results;
+    if (req.user.role === 'teacher') {
+      results = await Result.find()
+        .populate('studentId', 'name email')
+        .populate('createdBy', 'name')
+        .sort({ examDate: -1 })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+    } else {
+      results = await Result.find({ studentId: req.user.userId })
+        .populate('createdBy', 'name')
+        .sort({ examDate: -1 })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Get results error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Leaderboard with better aggregation
+app.get('/api/results/leaderboard', authenticateToken, async (req, res) => {
+  try {
+    const cacheKey = 'leaderboard_top_20';
+    let cachedLeaderboard = getCachedData(cacheKey);
+    
+    if (cachedLeaderboard) {
+      return res.json(cachedLeaderboard);
+    }
+
+    const leaderboard = await Result.aggregate([
+      {
+        $group: {
+          _id: '$studentId',
+          averagePercentage: { $avg: '$percentage' },
+          totalExams: { $sum: 1 },
+          highestScore: { $max: '$percentage' },
+          lastExamDate: { $max: '$examDate' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'student',
+          pipeline: [
+            { $project: { name: 1, email: 1, profileImage: 1 } }
+          ]
+        }
+      },
+      {
+        $unwind: '$student'
+      },
+      {
+        $project: {
+          _id: 1,
+          averagePercentage: { $round: ['$averagePercentage', 2] },
+          totalExams: 1,
+          highestScore: { $round: ['$highestScore', 2] },
+          lastExamDate: 1,
+          name: '$student.name',
+          email: '$student.email',
+          profileImage: '$student.profileImage'
+        }
+      },
+      {
+        $sort: { averagePercentage: -1 }
+      },
+      {
+        $limit: 20
+      }
+    ]);
+
+    const rankedLeaderboard = leaderboard.map((student, index) => ({
+      ...student,
+      rank: index + 1
+    }));
+
+    setCachedData(cacheKey, rankedLeaderboard);
+    res.json(rankedLeaderboard);
+  } catch (error) {
+    console.error('Get leaderboard error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZED Announcements Routes
+app.get('/api/announcements', authenticateToken, async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    
+    const announcements = await Announcement.find()
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+      
+    res.json(announcements);
+  } catch (error) {
+    console.error('Get announcements error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/announcements', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const { title, content, priority } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
+    }
+
+    const announcement = new Announcement({
+      title,
+      content,
+      priority: priority || 'normal',
+      createdBy: req.user.userId,
+      readBy: []
+    });
+
+    await announcement.save();
+    await announcement.populate('createdBy', 'name email');
+    
+    res.status(201).json(announcement);
+  } catch (error) {
+    console.error('Create announcement error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('❌ Server Error:', err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
+});
+
+// Catch-all handler
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Start server
+
 
 startServer();
-
 module.exports = app;
