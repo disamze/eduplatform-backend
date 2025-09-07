@@ -377,9 +377,10 @@ const initializeDefaultData = async () => {
                 for (let i = 0; i < 6; i++) {
                     const monthIndex = (new Date().getMonth() - i + 12) % 12;
                     const year = monthIndex > new Date().getMonth() ? currentYear - 1 : currentYear;
+                    
                     let status = 'paid';
                     let paymentDate = new Date(year, monthIndex + 1, Math.floor(Math.random() * 28) + 1);
-
+                    
                     // Make some fees pending/overdue for demo
                     if (i === 0 && student.name === 'Sameer Kumar') {
                         status = 'pending';
@@ -529,7 +530,6 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const user = new User({
             email,
             password: hashedPassword,
@@ -849,6 +849,7 @@ app.delete('/api/resources/:id', authenticateToken, requireTeacher, async (req, 
 app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
     try {
         console.log('📥 Download request for resource:', req.params.id);
+
         const resource = await Resource.findById(req.params.id);
         if (!resource) {
             console.error('❌ Resource not found:', req.params.id);
@@ -882,6 +883,7 @@ app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
 
         // Send file
         const fileStream = fs.createReadStream(resource.filePath);
+
         fileStream.on('error', (error) => {
             console.error('❌ File stream error:', error);
             if (!res.headersSent) {
@@ -894,6 +896,7 @@ app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
         });
 
         fileStream.pipe(res);
+
     } catch (error) {
         console.error('❌ Download resource error:', error);
         if (!res.headersSent) {
@@ -979,7 +982,6 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const student = new User({
             email,
             password: hashedPassword,
@@ -1171,6 +1173,7 @@ app.delete('/api/fees/:id', authenticateToken, requireTeacher, async (req, res) 
 app.get('/api/results', authenticateToken, async (req, res) => {
     try {
         let results;
+
         if (req.user.role === 'teacher') {
             results = await Result.find()
                 .populate('studentId', 'name email')
@@ -1334,7 +1337,6 @@ app.get('/api/results/leaderboard', authenticateToken, async (req, res) => {
 });
 
 // NEW: Announcement Routes
-
 app.get('/api/announcements', authenticateToken, async (req, res) => {
     try {
         const announcements = await Announcement.find()
