@@ -46,7 +46,21 @@ if (!fs.existsSync('uploads/profiles')) {
     fs.mkdirSync('uploads/profiles');
 }
 
+// FIXED: Serve static files with proper MIME types
 app.use('/uploads', express.static('uploads'));
+
+// Serve static files (HTML, CSS, JS) with proper MIME types
+app.use(express.static('.', {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        } else if (path.endsWith('.css')) {
+            res.setHeader('Content-Type', 'text/css');
+        } else if (path.endsWith('.html')) {
+            res.setHeader('Content-Type', 'text/html');
+        }
+    }
+}));
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
@@ -58,23 +72,29 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Root endpoint
+// Root endpoint - serve index.html for the main app
 app.get('/', (req, res) => {
-    res.json({
-        message: 'Educational Platform API is running',
-        version: '1.0.0',
-        health: '/health',
-        endpoints: {
-            auth: '/api/auth/*',
-            resources: '/api/resources/*',
-            schedules: '/api/schedules/*',
-            users: '/api/user/*',
-            students: '/api/students/*',
-            fees: '/api/fees/*',
-            results: '/api/results/*',
-            announcements: '/api/announcements/*'
-        }
-    });
+    // Check if it's an API request
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+        res.json({
+            message: 'Educational Platform API is running',
+            version: '1.0.0',
+            health: '/health',
+            endpoints: {
+                auth: '/api/auth/*',
+                resources: '/api/resources/*',
+                schedules: '/api/schedules/*',
+                users: '/api/user/*',
+                students: '/api/students/*',
+                fees: '/api/fees/*',
+                results: '/api/results/*',
+                announcements: '/api/announcements/*'
+            }
+        });
+    } else {
+        // Serve the HTML file
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
 });
 
 // MongoDB Connection
@@ -1445,9 +1465,14 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-    res.status(404).json({ error: 'Route not found' });
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+});
+
+// Catch-all handler - serve index.html for any other route (SPA routing)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start server
