@@ -1,4 +1,4 @@
-// Complete server.js with Fee Management System
+// Complete server.js with Fee Management System, Results/Leaderboard, and Announcements/Notice Board
 
 require('dotenv').config();
 
@@ -70,7 +70,9 @@ app.get('/', (req, res) => {
             schedules: '/api/schedules/*',
             users: '/api/user/*',
             students: '/api/students/*',
-            fees: '/api/fees/*'
+            fees: '/api/fees/*',
+            results: '/api/results/*',
+            announcements: '/api/announcements/*'
         }
     });
 });
@@ -104,6 +106,8 @@ if (process.env.NODE_ENV === 'production') {
         }
     }, 14 * 60 * 1000);
 }
+
+// Database Schemas
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -168,6 +172,38 @@ feeSchema.index({ studentId: 1, month: 1, year: 1 }, { unique: true });
 
 const Fee = mongoose.model('Fee', feeSchema);
 
+// Result Schema
+const resultSchema = new mongoose.Schema({
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    examName: { type: String, required: true },
+    subject: { type: String, required: true },
+    class: { type: String, required: true },
+    examDate: { type: Date, required: true },
+    totalMarks: { type: Number, required: true },
+    marksObtained: { type: Number, required: true },
+    percentage: { type: Number, required: true },
+    grade: { type: String, required: true },
+    remarks: { type: String, default: '' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+const Result = mongoose.model('Result', resultSchema);
+
+// NEW: Announcement Schema
+const announcementSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+const Announcement = mongoose.model('Announcement', announcementSchema);
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -223,7 +259,6 @@ const uploadResource = multer({
         const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|zip|rar/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-
         if (mimetype && extname) {
             return cb(null, true);
         } else {
@@ -239,7 +274,6 @@ const uploadProfile = multer({
         const allowedTypes = /jpeg|jpg|png|gif/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-
         if (mimetype && extname) {
             return cb(null, true);
         } else {
@@ -248,7 +282,19 @@ const uploadProfile = multer({
     }
 });
 
-// Initialize Default Users and Sample Fees
+// Helper function to calculate grade
+function calculateGrade(percentage) {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B+';
+    if (percentage >= 60) return 'B';
+    if (percentage >= 50) return 'C+';
+    if (percentage >= 40) return 'C';
+    if (percentage >= 33) return 'D';
+    return 'F';
+}
+
+// Initialize Default Users, Sample Data, and Announcements
 const initializeDefaultData = async () => {
     try {
         const userCount = await User.countDocuments();
@@ -280,29 +326,40 @@ const initializeDefaultData = async () => {
                     profileImage: 'https://images.unsplash.com/photo-1494790108755-2616b6b2ad0a?w=150&h=150&fit=crop&crop=face',
                     bio: 'Aspiring engineer, loves mathematics and science.',
                     phone: '+91-9876543212'
+                },
+                {
+                    email: 'student3@math.com',
+                    password: await bcrypt.hash('studentpass3', 10),
+                    name: 'Arjun Patel',
+                    role: 'student',
+                    profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+                    bio: 'Mathematics enthusiast and problem solver.',
+                    phone: '+91-9876543213'
                 }
             ];
 
             const createdUsers = await User.insertMany(defaultUsers);
             console.log('✅ Default users created');
 
-            // Create sample fee records
+            // Get teacher and students
+            const teacher = createdUsers.find(user => user.role === 'teacher');
             const students = createdUsers.filter(user => user.role === 'student');
+
+            // Create sample fee records
             const currentYear = new Date().getFullYear();
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                           'July', 'August', 'September', 'October', 'November', 'December'];
+            const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
 
             const sampleFees = [];
-            
+
             for (const student of students) {
                 // Create fees for the last 6 months
                 for (let i = 0; i < 6; i++) {
                     const monthIndex = (new Date().getMonth() - i + 12) % 12;
                     const year = monthIndex > new Date().getMonth() ? currentYear - 1 : currentYear;
-                    
                     let status = 'paid';
                     let paymentDate = new Date(year, monthIndex + 1, Math.floor(Math.random() * 28) + 1);
-                    
+
                     // Make some fees pending/overdue for demo
                     if (i === 0 && student.name === 'Sameer Kumar') {
                         status = 'pending';
@@ -326,6 +383,66 @@ const initializeDefaultData = async () => {
 
             await Fee.insertMany(sampleFees);
             console.log('✅ Sample fee records created');
+
+            // Create sample results
+            const sampleResults = [];
+            const subjects = ['Mathematics', 'Physics', 'Chemistry'];
+            const classes = ['Class 9', 'Class 10', 'Class 11'];
+            const examNames = ['Monthly Test', 'Mid Term', 'Final Exam'];
+
+            for (const student of students) {
+                for (let i = 0; i < 3; i++) {
+                    const totalMarks = 100;
+                    const marksObtained = Math.floor(Math.random() * 40) + 60; // 60-100 marks
+                    const percentage = (marksObtained / totalMarks) * 100;
+                    const grade = calculateGrade(percentage);
+
+                    sampleResults.push({
+                        studentId: student._id,
+                        examName: examNames[i],
+                        subject: subjects[Math.floor(Math.random() * subjects.length)],
+                        class: classes[Math.floor(Math.random() * classes.length)],
+                        examDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+                        totalMarks: totalMarks,
+                        marksObtained: marksObtained,
+                        percentage: Math.round(percentage * 100) / 100,
+                        grade: grade,
+                        remarks: percentage >= 80 ? 'Excellent performance' : percentage >= 60 ? 'Good work' : 'Needs improvement',
+                        createdBy: teacher._id
+                    });
+                }
+            }
+
+            await Result.insertMany(sampleResults);
+            console.log('✅ Sample result records created');
+
+            // Create sample announcements
+            const sampleAnnouncements = [
+                {
+                    title: 'Welcome to New Academic Year 2025!',
+                    content: 'Dear students, welcome to the new academic year! We are excited to begin this journey with you. Please make sure to check your schedules and prepare for the upcoming classes. Best of luck!',
+                    priority: 'high',
+                    createdBy: teacher._id,
+                    readBy: []
+                },
+                {
+                    title: 'Mathematics Olympiad Registration Open',
+                    content: 'Students interested in participating in the Mathematics Olympiad can now register. The registration deadline is next month. This is a great opportunity to showcase your mathematical skills!',
+                    priority: 'normal',
+                    createdBy: teacher._id,
+                    readBy: [students[0]._id] // Sameer has read it
+                },
+                {
+                    title: 'Holiday Notice - Republic Day',
+                    content: 'Please note that classes will remain closed on 26th January 2025 in observance of Republic Day. Regular classes will resume from 27th January. Happy Republic Day in advance!',
+                    priority: 'low',
+                    createdBy: teacher._id,
+                    readBy: [students[1]._id, students[2]._id] // Priya and Arjun have read it
+                }
+            ];
+
+            await Announcement.insertMany(sampleAnnouncements);
+            console.log('✅ Sample announcement records created');
         }
     } catch (error) {
         console.error('❌ Error creating default data:', error);
@@ -392,6 +509,7 @@ app.post('/api/auth/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+
         const user = new User({
             email,
             password: hashedPassword,
@@ -440,6 +558,7 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
 app.put('/api/user/profile', authenticateToken, async (req, res) => {
     try {
         const { name, bio, phone, dateOfBirth } = req.body;
+
         const user = await User.findByIdAndUpdate(
             req.user.userId,
             { name, bio, phone, dateOfBirth, updatedAt: new Date() },
@@ -549,8 +668,8 @@ app.post('/api/students/:id/profile/image', authenticateToken, requireTeacher, u
 app.put('/api/students/:id/profile', authenticateToken, requireTeacher, async (req, res) => {
     try {
         const { name, email, bio, phone, dateOfBirth } = req.body;
-        const student = await User.findById(req.params.id);
 
+        const student = await User.findById(req.params.id);
         if (!student || student.role !== 'student') {
             return res.status(404).json({ error: 'Student not found' });
         }
@@ -646,7 +765,7 @@ app.get('/api/resources/:id', authenticateToken, async (req, res) => {
     try {
         const resource = await Resource.findById(req.params.id)
             .populate('uploadedBy', 'name email');
-        
+
         if (!resource) {
             return res.status(404).json({ error: 'Resource not found' });
         }
@@ -706,11 +825,10 @@ app.delete('/api/resources/:id', authenticateToken, requireTeacher, async (req, 
     }
 });
 
-// Fixed download resource endpoint
+// FIXED download resource endpoint
 app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
     try {
         console.log('📥 Download request for resource:', req.params.id);
-        
         const resource = await Resource.findById(req.params.id);
         if (!resource) {
             console.error('❌ Resource not found:', req.params.id);
@@ -744,7 +862,6 @@ app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
 
         // Send file
         const fileStream = fs.createReadStream(resource.filePath);
-        
         fileStream.on('error', (error) => {
             console.error('❌ File stream error:', error);
             if (!res.headersSent) {
@@ -757,7 +874,6 @@ app.get('/api/resources/:id/download', authenticateToken, async (req, res) => {
         });
 
         fileStream.pipe(res);
-
     } catch (error) {
         console.error('❌ Download resource error:', error);
         if (!res.headersSent) {
@@ -843,6 +959,7 @@ app.post('/api/students', authenticateToken, requireTeacher, async (req, res) =>
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+
         const student = new User({
             email,
             password: hashedPassword,
@@ -882,10 +999,11 @@ app.delete('/api/students/:id', authenticateToken, requireTeacher, async (req, r
             }
         }
 
-        // Delete all fee records for this student
+        // Delete all related records for this student
         await Fee.deleteMany({ studentId: req.params.id });
-
+        await Result.deleteMany({ studentId: req.params.id });
         await User.findByIdAndDelete(req.params.id);
+
         res.json({ message: 'Student deleted successfully' });
     } catch (error) {
         console.error('Delete student error:', error);
@@ -899,12 +1017,12 @@ app.delete('/api/students/:id', authenticateToken, requireTeacher, async (req, r
 app.get('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
     try {
         const students = await User.find({ role: 'student' }).select('-password');
-        
+
         const studentsWithFees = await Promise.all(
             students.map(async (student) => {
                 const fees = await Fee.find({ studentId: student._id })
                     .sort({ year: -1, createdAt: -1 });
-                
+
                 return {
                     ...student.toObject(),
                     fees: fees
@@ -923,7 +1041,7 @@ app.get('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
 app.get('/api/fees/stats', authenticateToken, requireTeacher, async (req, res) => {
     try {
         const totalStudents = await User.countDocuments({ role: 'student' });
-        
+
         const feeStats = await Fee.aggregate([
             {
                 $group: {
@@ -1029,6 +1147,298 @@ app.delete('/api/fees/:id', authenticateToken, requireTeacher, async (req, res) 
     }
 });
 
+// Results Management Routes
+app.get('/api/results', authenticateToken, async (req, res) => {
+    try {
+        let results;
+        if (req.user.role === 'teacher') {
+            results = await Result.find()
+                .populate('studentId', 'name email')
+                .populate('createdBy', 'name')
+                .sort({ examDate: -1 });
+        } else {
+            results = await Result.find({ studentId: req.user.userId })
+                .populate('createdBy', 'name')
+                .sort({ examDate: -1 });
+        }
+
+        res.json(results);
+    } catch (error) {
+        console.error('Get results error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/results', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { studentId, examName, subject, class: className, examDate, totalMarks, marksObtained, remarks } = req.body;
+
+        if (!studentId || !examName || !subject || !className || !examDate || !totalMarks || marksObtained === undefined) {
+            return res.status(400).json({ error: 'All required fields must be provided' });
+        }
+
+        // Check if student exists
+        const student = await User.findById(studentId);
+        if (!student || student.role !== 'student') {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        const percentage = (marksObtained / totalMarks) * 100;
+        const grade = calculateGrade(percentage);
+
+        const result = new Result({
+            studentId,
+            examName,
+            subject,
+            class: className,
+            examDate: new Date(examDate),
+            totalMarks: parseInt(totalMarks),
+            marksObtained: parseInt(marksObtained),
+            percentage: Math.round(percentage * 100) / 100,
+            grade,
+            remarks: remarks || '',
+            createdBy: req.user.userId
+        });
+
+        await result.save();
+        await result.populate('studentId', 'name email');
+        await result.populate('createdBy', 'name');
+
+        res.status(201).json(result);
+    } catch (error) {
+        console.error('Create result error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/results/:id', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { examName, subject, class: className, examDate, totalMarks, marksObtained, remarks } = req.body;
+
+        const result = await Result.findById(req.params.id);
+        if (!result) {
+            return res.status(404).json({ error: 'Result not found' });
+        }
+
+        const percentage = (marksObtained / totalMarks) * 100;
+        const grade = calculateGrade(percentage);
+
+        const updatedResult = await Result.findByIdAndUpdate(
+            req.params.id,
+            {
+                examName,
+                subject,
+                class: className,
+                examDate: new Date(examDate),
+                totalMarks: parseInt(totalMarks),
+                marksObtained: parseInt(marksObtained),
+                percentage: Math.round(percentage * 100) / 100,
+                grade,
+                remarks: remarks || '',
+                updatedAt: new Date()
+            },
+            { new: true }
+        ).populate('studentId', 'name email').populate('createdBy', 'name');
+
+        res.json(updatedResult);
+    } catch (error) {
+        console.error('Update result error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/api/results/:id', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        await Result.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Result deleted successfully' });
+    } catch (error) {
+        console.error('Delete result error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/results/leaderboard', authenticateToken, async (req, res) => {
+    try {
+        const leaderboard = await Result.aggregate([
+            {
+                $group: {
+                    _id: '$studentId',
+                    averagePercentage: { $avg: '$percentage' },
+                    totalExams: { $sum: 1 },
+                    highestScore: { $max: '$percentage' },
+                    lastExamDate: { $max: '$examDate' }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'student'
+                }
+            },
+            {
+                $unwind: '$student'
+            },
+            {
+                $project: {
+                    _id: 1,
+                    averagePercentage: { $round: ['$averagePercentage', 2] },
+                    totalExams: 1,
+                    highestScore: { $round: ['$highestScore', 2] },
+                    lastExamDate: 1,
+                    name: '$student.name',
+                    email: '$student.email',
+                    profileImage: '$student.profileImage'
+                }
+            },
+            {
+                $sort: { averagePercentage: -1 }
+            },
+            {
+                $limit: 50
+            }
+        ]);
+
+        // Add rank to each student
+        const rankedLeaderboard = leaderboard.map((student, index) => ({
+            ...student,
+            rank: index + 1
+        }));
+
+        res.json(rankedLeaderboard);
+    } catch (error) {
+        console.error('Get leaderboard error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// NEW: Announcement Routes
+
+app.get('/api/announcements', authenticateToken, async (req, res) => {
+    try {
+        const announcements = await Announcement.find()
+            .populate('createdBy', 'name email')
+            .sort({ createdAt: -1 });
+
+        res.json(announcements);
+    } catch (error) {
+        console.error('Get announcements error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/announcements', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { title, content, priority } = req.body;
+
+        if (!title || !content) {
+            return res.status(400).json({ error: 'Title and content are required' });
+        }
+
+        const announcement = new Announcement({
+            title,
+            content,
+            priority: priority || 'normal',
+            createdBy: req.user.userId,
+            readBy: []
+        });
+
+        await announcement.save();
+        await announcement.populate('createdBy', 'name email');
+
+        res.status(201).json(announcement);
+    } catch (error) {
+        console.error('Create announcement error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/announcements/:id', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const { title, content, priority } = req.body;
+
+        const announcement = await Announcement.findById(req.params.id);
+        if (!announcement) {
+            return res.status(404).json({ error: 'Announcement not found' });
+        }
+
+        const updatedAnnouncement = await Announcement.findByIdAndUpdate(
+            req.params.id,
+            {
+                title,
+                content,
+                priority: priority || 'normal',
+                updatedAt: new Date()
+            },
+            { new: true }
+        ).populate('createdBy', 'name email');
+
+        res.json(updatedAnnouncement);
+    } catch (error) {
+        console.error('Update announcement error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.delete('/api/announcements/:id', authenticateToken, requireTeacher, async (req, res) => {
+    try {
+        const announcement = await Announcement.findById(req.params.id);
+        if (!announcement) {
+            return res.status(404).json({ error: 'Announcement not found' });
+        }
+
+        await Announcement.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Announcement deleted successfully' });
+    } catch (error) {
+        console.error('Delete announcement error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// NEW: Mark announcement as read (Student only)
+app.post('/api/announcements/:id/read', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ error: 'Student access only' });
+        }
+
+        const announcement = await Announcement.findById(req.params.id);
+        if (!announcement) {
+            return res.status(404).json({ error: 'Announcement not found' });
+        }
+
+        // Add student to readBy array if not already present
+        if (!announcement.readBy.includes(req.user.userId)) {
+            announcement.readBy.push(req.user.userId);
+            await announcement.save();
+        }
+
+        res.json({ message: 'Announcement marked as read' });
+    } catch (error) {
+        console.error('Mark announcement as read error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// NEW: Get unread announcements count (Student only)
+app.get('/api/announcements/unread/count', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'student') {
+            return res.json({ count: 0 });
+        }
+
+        const count = await Announcement.countDocuments({
+            readBy: { $ne: req.user.userId }
+        });
+
+        res.json({ count });
+    } catch (error) {
+        console.error('Get unread announcements count error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('❌ Server Error:', err.stack);
@@ -1050,6 +1460,8 @@ const startServer = async () => {
             console.log(`📊 Health check: http://localhost:${PORT}/health`);
             console.log(`🎓 Educational Platform API Ready!`);
             console.log(`💰 Fee Management System Enabled!`);
+            console.log(`🏆 Results & Leaderboard System Enabled!`);
+            console.log(`📢 Announcements & Notice Board System Enabled!`);
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
