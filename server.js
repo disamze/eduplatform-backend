@@ -1,5 +1,5 @@
-// Educational Platform Backend API - Complete API-Only Version
-// Fixed version without HTML serving to prevent ENOENT errors
+// Educational Platform Backend API - Fixed MongoDB Connection Timing
+// Resolves the bufferCommands connection timing issue
 
 require('dotenv').config();
 
@@ -56,7 +56,8 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Educational Platform API',
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -66,6 +67,7 @@ app.get('/', (req, res) => {
     message: 'Educational Platform Backend API',
     version: '1.0.0',
     status: 'Running',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'connecting',
     health: '/health',
     endpoints: {
       auth: '/api/auth/*',
@@ -80,25 +82,6 @@ app.get('/', (req, res) => {
     documentation: 'This is a backend API service. Connect your frontend to these endpoints.',
     note: 'All API endpoints require proper authentication tokens'
   });
-});
-
-// MongoDB Connection with fixed options
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eduplatform';
-
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  maxPoolSize: 10,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  bufferCommands: false
-})
-.then(() => {
-  console.log('✅ Connected to MongoDB');
-})
-.catch((error) => {
-  console.error('❌ MongoDB connection error:', error);
-  process.exit(1);
 });
 
 // Database Schemas
@@ -276,10 +259,12 @@ function calculateGrade(percentage) {
   return 'F';
 }
 
-// Initialize Default Data
+// Initialize Default Data - FIXED to wait for connection
 const initializeDefaultData = async () => {
   try {
+    console.log('🔄 Checking for existing users...');
     const userCount = await User.countDocuments();
+    
     if (userCount === 0) {
       console.log('🔄 Initializing default data...');
       
@@ -307,6 +292,14 @@ const initializeDefaultData = async () => {
           role: 'student',
           bio: 'Aspiring engineer, loves mathematics and science.',
           phone: '+91-9876543212'
+        },
+        {
+          email: 'student3@math.com',
+          password: await bcrypt.hash('studentpass3', 10),
+          name: 'Arjun Patel',
+          role: 'student',
+          bio: 'Mathematics enthusiast and problem solver.',
+          phone: '+91-9876543213'
         }
       ];
 
@@ -319,15 +312,92 @@ const initializeDefaultData = async () => {
       // Create sample announcements
       const sampleAnnouncements = [
         {
-          title: 'Welcome to Educational Platform!',
-          content: 'Welcome to our educational platform. This is a demo announcement.',
+          title: 'Welcome to New Academic Year 2025!',
+          content: 'Dear students, welcome to the new academic year! We are excited to begin this journey with you. Please make sure to check your schedules and prepare for the upcoming classes. Best of luck!',
           priority: 'high',
-          createdBy: teacher._id
+          createdBy: teacher._id,
+          readBy: []
+        },
+        {
+          title: 'Mathematics Olympiad Registration Open',
+          content: 'Students interested in participating in the Mathematics Olympiad can now register. The registration deadline is next month. This is a great opportunity to showcase your mathematical skills!',
+          priority: 'normal',
+          createdBy: teacher._id,
+          readBy: [students[0]._id]
         }
       ];
 
       await Announcement.insertMany(sampleAnnouncements);
-      console.log('✅ Sample data initialized');
+      console.log('✅ Sample announcements created');
+
+      // Create sample fee records
+      const currentYear = new Date().getFullYear();
+      const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      const sampleFees = [];
+      for (const student of students) {
+        for (let i = 0; i < 3; i++) {
+          const monthIndex = (new Date().getMonth() - i + 12) % 12;
+          const year = monthIndex > new Date().getMonth() ? currentYear - 1 : currentYear;
+          
+          let status = 'paid';
+          let paymentDate = new Date(year, monthIndex + 1, Math.floor(Math.random() * 28) + 1);
+          
+          if (i === 0 && student.name === 'Sameer Kumar') {
+            status = 'pending';
+            paymentDate = null;
+          }
+          
+          sampleFees.push({
+            studentId: student._id,
+            month: months[monthIndex],
+            year: year,
+            amount: 1500,
+            status: status,
+            paymentDate: paymentDate,
+            notes: status === 'paid' ? 'Paid online' : ''
+          });
+        }
+      }
+      
+      await Fee.insertMany(sampleFees);
+      console.log('✅ Sample fee records created');
+
+      // Create sample results
+      const sampleResults = [];
+      const subjects = ['Mathematics', 'Physics', 'Chemistry'];
+      const classes = ['Class 9', 'Class 10', 'Class 11'];
+      const examNames = ['Monthly Test', 'Mid Term', 'Final Exam'];
+
+      for (const student of students) {
+        for (let i = 0; i < 2; i++) {
+          const totalMarks = 100;
+          const marksObtained = Math.floor(Math.random() * 40) + 60;
+          const percentage = (marksObtained / totalMarks) * 100;
+          const grade = calculateGrade(percentage);
+
+          sampleResults.push({
+            studentId: student._id,
+            examName: examNames[i],
+            subject: subjects[Math.floor(Math.random() * subjects.length)],
+            class: classes[Math.floor(Math.random() * classes.length)],
+            examDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+            totalMarks: totalMarks,
+            marksObtained: marksObtained,
+            percentage: Math.round(percentage * 100) / 100,
+            grade: grade,
+            remarks: percentage >= 80 ? 'Excellent performance' : percentage >= 60 ? 'Good work' : 'Needs improvement',
+            createdBy: teacher._id
+          });
+        }
+      }
+
+      await Result.insertMany(sampleResults);
+      console.log('✅ Sample result records created');
+      console.log('🎉 All sample data initialized successfully!');
+    } else {
+      console.log('✅ Existing users found, skipping default data initialization');
     }
   } catch (error) {
     console.error('❌ Error initializing default data:', error);
@@ -369,7 +439,8 @@ app.post('/api/auth/login', async (req, res) => {
         role: user.role,
         profileImage: user.profileImage,
         bio: user.bio,
-        phone: user.phone
+        phone: user.phone,
+        dateOfBirth: user.dateOfBirth
       }
     });
   } catch (error) {
@@ -414,7 +485,8 @@ app.post('/api/auth/register', async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
-        role: user.role
+        role: user.role,
+        profileImage: user.profileImage
       }
     });
   } catch (error) {
@@ -437,6 +509,23 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
   }
 });
 
+app.put('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, bio, phone, dateOfBirth } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { name, bio, phone, dateOfBirth, updatedAt: new Date() },
+      { new: true }
+    ).select('-password');
+
+    res.json(user);
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Dashboard Routes
 app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
   try {
@@ -444,19 +533,25 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
       const studentsCount = await User.countDocuments({ role: 'student' });
       const resourcesCount = await Resource.countDocuments();
       const announcementsCount = await Announcement.countDocuments();
+      const feesCount = await Fee.countDocuments();
+      const resultsCount = await Result.countDocuments();
       
       res.json({
         students: studentsCount,
         resources: resourcesCount,
-        announcements: announcementsCount
+        announcements: announcementsCount,
+        fees: feesCount,
+        results: resultsCount
       });
     } else {
       const totalResources = await Resource.countDocuments();
       const totalAnnouncements = await Announcement.countDocuments();
+      const upcomingSchedules = await Schedule.countDocuments();
       
       res.json({
         totalResources,
-        totalAnnouncements
+        totalAnnouncements,
+        upcomingSchedules
       });
     }
   } catch (error) {
@@ -472,6 +567,124 @@ app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => 
     res.json(students);
   } catch (error) {
     console.error('Get students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Fee Management Routes
+app.get('/api/fees', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const students = await User.find({ role: 'student' }).select('-password');
+    
+    const studentsWithFees = await Promise.all(
+      students.map(async (student) => {
+        const fees = await Fee.find({ studentId: student._id })
+          .sort({ year: -1, createdAt: -1 });
+        
+        return {
+          ...student.toObject(),
+          fees: fees
+        };
+      })
+    );
+
+    res.json(studentsWithFees);
+  } catch (error) {
+    console.error('Get student fees error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/fees/status', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ error: 'Student access only' });
+    }
+
+    const fees = await Fee.find({ studentId: req.user.userId })
+      .sort({ year: -1, createdAt: -1 });
+
+    res.json(fees);
+  } catch (error) {
+    console.error('Get student fee status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Results Management Routes
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    let results;
+
+    if (req.user.role === 'teacher') {
+      results = await Result.find()
+        .populate('studentId', 'name email')
+        .populate('createdBy', 'name')
+        .sort({ examDate: -1 });
+    } else {
+      results = await Result.find({ studentId: req.user.userId })
+        .populate('createdBy', 'name')
+        .sort({ examDate: -1 });
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Get results error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/results/leaderboard', authenticateToken, async (req, res) => {
+  try {
+    const leaderboard = await Result.aggregate([
+      {
+        $group: {
+          _id: '$studentId',
+          averagePercentage: { $avg: '$percentage' },
+          totalExams: { $sum: 1 },
+          highestScore: { $max: '$percentage' },
+          lastExamDate: { $max: '$examDate' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      {
+        $unwind: '$student'
+      },
+      {
+        $project: {
+          _id: 1,
+          averagePercentage: { $round: ['$averagePercentage', 2] },
+          totalExams: 1,
+          highestScore: { $round: ['$highestScore', 2] },
+          lastExamDate: 1,
+          name: '$student.name',
+          email: '$student.email',
+          profileImage: '$student.profileImage'
+        }
+      },
+      {
+        $sort: { averagePercentage: -1 }
+      },
+      {
+        $limit: 10
+      }
+    ]);
+
+    const rankedLeaderboard = leaderboard.map((student, index) => ({
+      ...student,
+      rank: index + 1
+    }));
+
+    res.json(rankedLeaderboard);
+  } catch (error) {
+    console.error('Get leaderboard error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -502,7 +715,8 @@ app.post('/api/announcements', authenticateToken, requireTeacher, async (req, re
       title,
       content,
       priority: priority || 'normal',
-      createdBy: req.user.userId
+      createdBy: req.user.userId,
+      readBy: []
     });
 
     await announcement.save();
@@ -511,6 +725,23 @@ app.post('/api/announcements', authenticateToken, requireTeacher, async (req, re
     res.status(201).json(announcement);
   } catch (error) {
     console.error('Create announcement error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/announcements/unread/count', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'student') {
+      return res.json({ count: 0 });
+    }
+
+    const count = await Announcement.countDocuments({
+      readBy: { $ne: req.user.userId }
+    });
+
+    res.json({ count });
+  } catch (error) {
+    console.error('Get unread announcements count error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -526,7 +757,7 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'API route not found' });
 });
 
-// Catch-all handler for non-API routes - return JSON instead of trying to serve HTML
+// Catch-all handler for non-API routes - return JSON instead of HTML
 app.use('*', (req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
@@ -535,15 +766,34 @@ app.use('*', (req, res) => {
   });
 });
 
-// Start server
+// MongoDB Connection and Server Start - FIXED TIMING
 const startServer = async () => {
   try {
+    console.log('🔄 Connecting to MongoDB...');
+    
+    // MongoDB Connection with proper await
+    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eduplatform';
+    
+    await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      bufferCommands: false
+    });
+    
+    console.log('✅ Connected to MongoDB');
+    
+    // Only initialize data AFTER connection is established
     await initializeDefaultData();
     
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Educational Platform API running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔑 Login endpoint: http://localhost:${PORT}/api/auth/login`);
+      console.log(`👨‍🏫 Teacher login: teachshashi@tmt.com / shashi12@tmt`);
+      console.log(`👨‍🎓 Student login: student1@math.com / studentpass1`);
       console.log(`✅ API-only backend ready!`);
     });
 
@@ -559,12 +809,24 @@ const startServer = async () => {
       });
     });
 
+    process.on('SIGINT', () => {
+      console.log('💤 SIGINT received: closing server');
+      server.close(() => {
+        console.log('🔌 Server closed');
+        mongoose.connection.close(false, () => {
+          console.log('🗄️ MongoDB connection closed');
+          process.exit(0);
+        });
+      });
+    });
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
 
+// Start the server
 startServer();
 
 module.exports = app;
