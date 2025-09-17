@@ -1,7 +1,7 @@
 {
   "name": "eduplatform-backend",
   "version": "1.0.0",
-  "description": "Educational Platform Backend API",
+  "description": "Educational Platform Backend API - Optimized for production",
   "main": "server.js",
   "engines": {
     "node": "18.x"
@@ -29,7 +29,9 @@
     "nodejs",
     "express",
     "mongodb",
-    "learning"
+    "learning",
+    "optimized",
+    "production"
   ],
   "author": "Educational Platform Team",
   "license": "MIT",
