@@ -1,5 +1,5 @@
 // Complete server.js with Fee Management System, Results/Leaderboard, and Announcements/Notice Board
-// Optimized version without cold start mechanisms
+// Fixed version with correct MongoDB connection options
 
 require('dotenv').config();
 
@@ -98,7 +98,7 @@ app.get('/', (req, res) => {
   }
 });
 
-// MongoDB Connection with optimized settings
+// MongoDB Connection with fixed options
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eduplatform';
 
 mongoose.connect(MONGODB_URI, {
@@ -107,8 +107,7 @@ mongoose.connect(MONGODB_URI, {
   maxPoolSize: 10, // Maintain up to 10 socket connections
   serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
   socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-  bufferCommands: false, // Disable mongoose buffering
-  bufferMaxEntries: 0 // Disable mongoose buffering
+  bufferCommands: false // Disable mongoose buffering
 })
 .then(() => {
   console.log('✅ Connected to MongoDB');
