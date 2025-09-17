@@ -1,7 +1,7 @@
 {
   "name": "eduplatform-backend",
   "version": "1.0.0",
-  "description": "Educational Platform Backend API - Optimized for production",
+  "description": "Educational Platform Backend API",
   "main": "server.js",
   "engines": {
     "node": "18.x"
@@ -29,14 +29,12 @@
     "nodejs",
     "express",
     "mongodb",
-    "learning",
-    "optimized",
-    "production"
+    "learning"
   ],
   "author": "Educational Platform Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/eduplatform-backend.git"
+    "url": "git+https://github.com/disamaze/eduplatform-backend.git"
   }
 }
